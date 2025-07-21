@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>To-Do List</title>
+    <!-- Tailwind CSS CDN for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome for icons -->
+    <link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/4202/4202843.png">
+
+
+    <style>
+        /* Custom styles for Inter font and general body styling */
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center py-8 px-4">
+
+<div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-2xl">
+    <h1 class="text-4xl font-bold text-center text-gray-800 mb-8">My To-Do List</h1>
+
+    <!-- Error/Loading Message Area -->
+    <div id="message-area" class="mb-4"></div>
+
+    <!-- Add New Todo Form -->
+    <form id="add-todo-form" class="mb-8 p-4 border border-gray-200 rounded-lg bg-gray-50 shadow-sm">
+        <h2 class="text-2xl font-semibold text-gray-700 mb-4">Add New To-Do</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+                <label for="title" class="block text-sm font-medium text-gray-700">Title</label>
+                <input
+                        type="text"
+                        id="title"
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                        placeholder="e.g., Buy groceries"
+                        required
+                />
+            </div>
+            <div>
+                <label for="description" class="block text-sm font-medium text-gray-700">Description (Optional)</label>
+                <input
+                        type="text"
+                        id="description"
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                        placeholder="e.g., Milk, eggs, bread"
+                />
+            </div>
+            <div>
+                <label for="dueDate" class="block text-sm font-medium text-gray-700">Due Date (Optional)</label>
+                <input
+                        type="date"
+                        id="dueDate"
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                />
+            </div>
+            <div>
+                <label for="priority" class="block text-sm font-medium text-gray-700">Priority</label>
+                <select
+                        id="priority"
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                >
+                    <option value="Medium">Medium</option>
+                    <option value="High">High</option>
+                    <option value="Low">Low</option>
+                </select>
+            </div>
+        </div>
+        <button
+                type="submit"
+                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md shadow-md transition duration-300 ease-in-out transform hover:scale-105"
+        >
+            Add To-Do
+        </button>
+    </form>
+
+    <!-- Todo List Display -->
+    <div>
+        <h2 class="text-2xl font-semibold text-gray-700 mb-4">Your To-Do Items</h2>
+        <ul id="todo-list" class="space-y-3">
+            <!-- To-Do items will be dynamically inserted here by JavaScript -->
+            <p id="no-todos-message" class="text-gray-500 text-center hidden">No to-do items found. Add one above!</p>
+        </ul>
+    </div>
+</div>
+
+<script>
+    // Base URL for the Spring Boot API
+    const API_BASE_URL = 'http://localhost:8080/api/todos';
+
+    // Get references to DOM elements
+    const todoList = document.getElementById('todo-list');
+    const addTodoForm = document.getElementById('add-todo-form');
+    const titleInput = document.getElementById('title');
+    const descriptionInput = document.getElementById('description');
+    const dueDateInput = document.getElementById('dueDate');
+    const prioritySelect = document.getElementById('priority');
+    const messageArea = document.getElementById('message-area');
+    const noTodosMessage = document.getElementById('no-todos-message');
+
+    // --- Helper Functions for UI Messages ---
+
+    /**
+     * Displays a temporary message (success, error, loading).
+     * @param {string} message The message to display.
+     * @param {'success'|'error'|'loading'} type The type of message.
+     */
+    function showMessage(message, type) {
+        let bgColor, textColor, borderColor;
+        switch (type) {
+            case 'success':
+                bgColor = 'bg-green-100';
+                textColor = 'text-green-700';
+                borderColor = 'border-green-400';
+                break;
+            case 'error':
+                bgColor = 'bg-red-100';
+                textColor = 'text-red-700';
+                borderColor = 'border-red-400';
+                break;
+            case 'loading':
+                bgColor = 'bg-blue-100';
+                textColor = 'text-blue-700';
+                borderColor = 'border-blue-400';
+                break;
+            default:
+                bgColor = 'bg-gray-100';
+                textColor = 'text-gray-700';
+                borderColor = 'border-gray-400';
+        }
+
+        messageArea.innerHTML = `
+            <div class="${bgColor} border ${borderColor} ${textColor} px-4 py-3 rounded relative" role="alert">
+                <strong class="font-bold">${type.charAt(0).toUpperCase() + type.slice(1)}!</strong>
+                <span class="block sm:inline"> ${message}</span>
+            </div>
+        `;
+        // Clear message after a few seconds, unless it's a loading message
+        if (type !== 'loading') {
+            setTimeout(() => {
+                messageArea.innerHTML = '';
+            }, 3000);
+        }
+    }
+
+    /**
+     * Clears all messages from the message area.
+     */
+    function clearMessages() {
+        messageArea.innerHTML = '';
+    }
+
+    // --- API Interaction Functions ---
+
+    /**
+     * Fetches all To-Do items from the backend API and renders them.
+     */
+    async function fetchTodos() {
+        showMessage('Loading todos...', 'loading');
+        try {
+            const response = await fetch(API_BASE_URL);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const todos = await response.json();
+            renderTodos(todos); // Render the fetched todos
+            clearMessages(); // Clear loading message on success
+        } catch (error) {
+            console.error('Error fetching todos:', error);
+            showMessage('Failed to load todos. Please ensure the backend is running.', 'error');
+            renderTodos([]); // Clear list on error
+        }
+    }
+
+    /**
+     * Adds a new To-Do item to the backend API.
+     * @param {Event} e The form submission event.
+     */
+    async function addTodo(e) {
+        e.preventDefault(); // Prevent default form submission
+
+        const title = titleInput.value.trim();
+        const description = descriptionInput.value.trim();
+        const dueDate = dueDateInput.value; // YYYY-MM-DD format
+        const priority = prioritySelect.value;
+
+        if (!title) {
+            showMessage('Todo title cannot be empty.', 'error');
+            return;
+        }
+
+        showMessage('Adding todo...', 'loading');
+        try {
+            const todoData = {
+                title: title,
+                description: description,
+                completed: false, // New todos are always initially not completed
+                dueDate: dueDate || null, // Send null if date is empty
+                priority: priority
+            };
+
+            const response = await fetch(API_BASE_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(todoData),
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            // After successful addition, re-fetch all todos to update the list
+            await fetchTodos();
+            // Clear form fields
+            titleInput.value = '';
+            descriptionInput.value = '';
+            dueDateInput.value = '';
+            prioritySelect.value = 'Medium';
+            showMessage('To-Do added successfully!', 'success');
+        } catch (error) {
+            console.error('Error adding todo:', error);
+            showMessage('Failed to add todo. Please try again.', 'error');
+        }
+    }
+
+    /**
+     * Toggles the completion status of a To-Do item.
+     * @param {number} id The ID of the To-Do item.
+     * @param {boolean} currentCompleted The current completion status.
+     * @param {object} todo The full todo object to update.
+     */
+    async function toggleTodoCompleted(id, currentCompleted, todo) {
+        showMessage('Updating todo status...', 'loading');
+        try {
+            // Create an updated todo object with the toggled completed status
+            const updatedTodo = {
+                ...todo, // Spread existing properties
+                completed: !currentCompleted, // Toggle the completed status
+            };
+
+            const response = await fetch(`${API_BASE_URL}/${id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(updatedTodo),
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            // Re-fetch all todos to ensure UI is consistent with backend
+            await fetchTodos();
+            showMessage('To-Do status updated!', 'success');
+        } catch (error) {
+            console.error('Error toggling todo status:', error);
+            showMessage('Failed to update todo status. Please try again.', 'error');
+        }
+    }
+
+    /**
+     * Deletes a To-Do item from the backend API.
+     * @param {number} id The ID of the To-Do item to delete.
+     */
+    async function deleteTodo(id) {
+        if (!confirm('Are you sure you want to delete this To-Do?')) {
+            return; // User cancelled
+        }
+
+        showMessage('Deleting todo...', 'loading');
+        try {
+            const response = await fetch(`${API_BASE_URL}/${id}`, {
+                method: 'DELETE',
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            // Re-fetch all todos to update the list
+            await fetchTodos();
+            showMessage('To-Do deleted successfully!', 'success');
+        } catch (error) {
+            console.error('Error deleting todo:', error);
+            showMessage('Failed to delete todo. Please try again.', 'error');
+        }
+    }
+
+    // --- UI Rendering Function ---
+
+    /**
+     * Renders the list of To-Do items in the UI.
+     * @param {Array<object>} todos The array of To-Do objects to render.
+     */
+    function renderTodos(todos) {
+        todoList.innerHTML = ''; // Clear existing list items
+
+        if (todos.length === 0) {
+            noTodosMessage.classList.remove('hidden');
+            return;
+        } else {
+            noTodosMessage.classList.add('hidden');
+        }
+
+        todos.forEach(todo => {
+            const li = document.createElement('li');
+            li.className = `flex items-center justify-between p-4 rounded-lg shadow-sm transition duration-200 ease-in-out
+                ${todo.completed ? 'bg-green-50 border-l-4 border-green-400' : 'bg-white border-l-4 border-blue-400'}
+            `;
+
+            li.innerHTML = `
+                <div class="flex-1 mr-4">
+                    <h3 class="text-lg font-semibold ${todo.completed ? 'text-gray-500 line-through' : 'text-gray-800'}">
+                        ${todo.title}
+                    </h3>
+                    ${todo.description ? `<p class="text-sm ${todo.completed ? 'text-gray-400 line-through' : 'text-gray-600'}">${todo.description}</p>` : ''}
+                    <div class="flex items-center text-xs text-gray-500 mt-1">
+                        ${todo.dueDate ? `
+                            <span class="mr-2">
+                                <i class="fas fa-calendar-alt mr-1"></i> Due: ${todo.dueDate}
+                            </span>
+                        ` : ''}
+                        ${todo.priority ? `
+                            <span class="px-2 py-0.5 rounded-full text-white text-xs font-medium
+                                ${todo.priority === 'High' ? 'bg-red-500' :
+                                   todo.priority === 'Medium' ? 'bg-yellow-500' : 'bg-green-500'}
+                            ">
+                                ${todo.priority}
+                            </span>
+                        ` : ''}
+                    </div>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button
+                        class="toggle-completed-btn p-2 rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 transition duration-300 ease-in-out
+                            ${todo.completed
+                                ? 'bg-yellow-500 hover:bg-yellow-600 text-white focus:ring-yellow-500'
+                                : 'bg-green-500 hover:bg-green-600 text-white focus:ring-green-500'
+                            }
+                        "
+                        data-id="${todo.id}"
+                        data-completed="${todo.completed}"
+                        title="${todo.completed ? 'Mark as Incomplete' : 'Mark as Complete'}"
+                    >
+                        ${todo.completed ? `
+                            <i class="fas fa-undo"></i>
+                        ` : `
+                            <i class="fas fa-check"></i>
+                        `}
+                    </button>
+                    <button
+                        class="delete-btn p-2 rounded-full bg-red-500 hover:bg-red-600 text-white focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition duration-300 ease-in-out transform hover:scale-105"
+                        data-id="${todo.id}"
+                        title="Delete To-Do"
+                    >
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </div>
+            `;
+            todoList.appendChild(li);
+        });
+
+        // Add event listeners to the newly rendered buttons
+        document.querySelectorAll('.toggle-completed-btn').forEach(button => {
+            button.onclick = (e) => {
+                const id = parseInt(e.currentTarget.dataset.id);
+                const completed = e.currentTarget.dataset.completed === 'true';
+                // Find the full todo object from the current list to pass to toggleTodoCompleted
+                const todoToUpdate = todos.find(t => t.id === id);
+                if (todoToUpdate) {
+                    toggleTodoCompleted(id, completed, todoToUpdate);
+                }
+            };
+        });
+
+        document.querySelectorAll('.delete-btn').forEach(button => {
+            button.onclick = (e) => {
+                const id = parseInt(e.currentTarget.dataset.id);
+                deleteTodo(id);
+            };
+        });
+    }
+
+    // --- Event Listeners ---
+
+    // Listen for form submission to add a new todo
+    addTodoForm.addEventListener('submit', addTodo);
+
+    // --- Initial Load ---
+
+    // Fetch todos when the page loads
+    document.addEventListener('DOMContentLoaded', fetchTodos);
+</script>
+</body>
+</html>
